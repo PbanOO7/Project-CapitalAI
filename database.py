@@ -1,11 +1,10 @@
 from datetime import datetime
+import pandas as pd
 import streamlit as st
 from sqlalchemy import create_engine, text
-import pandas as pd
 
 DATABASE_URL = st.secrets["DATABASE_URL"]
 STARTING_CAPITAL = float(st.secrets.get("STARTING_CAPITAL", 10000))
-BASE_RISK = float(st.secrets.get("BASE_RISK", 0.02))
 
 engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 
@@ -18,6 +17,7 @@ def init_db() -> None:
             symbol TEXT NOT NULL,
             entry_price DOUBLE PRECISION NOT NULL,
             stop_price DOUBLE PRECISION NOT NULL,
+            target_price DOUBLE PRECISION,
             position_size INTEGER NOT NULL,
             confidence INTEGER NOT NULL,
             status TEXT NOT NULL,
@@ -50,30 +50,29 @@ def init_db() -> None:
         )
         """))
 
-        # Seed defaults once
-        state = conn.execute(text("SELECT COUNT(*) FROM portfolio_state")).scalar()
-        if state == 0:
-            conn.execute(text("""
-            INSERT INTO portfolio_state (
-                id, starting_capital, peak_equity, current_equity, freeze_flag, last_updated
-            )
-            VALUES (1, :starting_capital, :peak_equity, :current_equity, FALSE, :last_updated)
-            """), {
-                "starting_capital": STARTING_CAPITAL,
-                "peak_equity": STARTING_CAPITAL,
-                "current_equity": STARTING_CAPITAL,
-                "last_updated": datetime.utcnow(),
-            })
+        conn.execute(text("""
+        INSERT INTO portfolio_state (
+            id, starting_capital, peak_equity, current_equity, freeze_flag, last_updated
+        )
+        VALUES (
+            1, :starting_capital, :peak_equity, :current_equity, FALSE, :last_updated
+        )
+        ON CONFLICT (id) DO NOTHING
+        """), {
+            "starting_capital": STARTING_CAPITAL,
+            "peak_equity": STARTING_CAPITAL,
+            "current_equity": STARTING_CAPITAL,
+            "last_updated": datetime.utcnow(),
+        })
 
-        rules = conn.execute(text("SELECT COUNT(*) FROM portfolio_rules")).scalar()
-        if rules == 0:
-            conn.execute(text("""
-            INSERT INTO portfolio_rules (
-                id, reduce_threshold, freeze_threshold, reduced_risk_multiplier,
-                max_exposure, max_concurrent_trades
-            )
-            VALUES (1, 0.05, 0.08, 0.5, 0.40, 3)
-            """))
+        conn.execute(text("""
+        INSERT INTO portfolio_rules (
+            id, reduce_threshold, freeze_threshold, reduced_risk_multiplier,
+            max_exposure, max_concurrent_trades
+        )
+        VALUES (1, 0.05, 0.08, 0.5, 0.40, 3)
+        ON CONFLICT (id) DO NOTHING
+        """))
 
 
 def get_trades_df() -> pd.DataFrame:
@@ -98,23 +97,25 @@ def add_trade(
     symbol: str,
     entry_price: float,
     stop_price: float,
+    target_price: float,
     position_size: int,
     confidence: int,
 ) -> None:
     with engine.begin() as conn:
         conn.execute(text("""
         INSERT INTO trades (
-            symbol, entry_price, stop_price, position_size,
-            confidence, status, entry_date
+            symbol, entry_price, stop_price, target_price,
+            position_size, confidence, status, entry_date
         )
         VALUES (
-            :symbol, :entry_price, :stop_price, :position_size,
-            :confidence, 'ACTIVE', :entry_date
+            :symbol, :entry_price, :stop_price, :target_price,
+            :position_size, :confidence, 'ACTIVE', :entry_date
         )
         """), {
             "symbol": symbol,
             "entry_price": entry_price,
             "stop_price": stop_price,
+            "target_price": target_price,
             "position_size": position_size,
             "confidence": confidence,
             "entry_date": datetime.utcnow(),

@@ -12,11 +12,19 @@ def calculate_position_size(capital: float, allowed_risk: float, entry: float, s
     return max(shares, 0)
 
 
-def record_paper_trade(symbol: str, entry: float, stop: float, shares: int, confidence: int) -> None:
+def record_paper_trade(
+    symbol: str,
+    entry: float,
+    stop: float,
+    target: float,
+    shares: int,
+    confidence: int,
+) -> None:
     add_trade(
         symbol=symbol,
         entry_price=entry,
         stop_price=stop,
+        target_price=target,
         position_size=shares,
         confidence=confidence,
     )

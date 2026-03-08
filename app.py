@@ -11,7 +11,6 @@ st.set_page_config(layout="wide", page_title="Project-CapitalAI")
 st.title("🧠 Project-CapitalAI")
 
 database.init_db()
-
 STARTING_CAPITAL = float(st.secrets.get("STARTING_CAPITAL", 10000))
 
 tab1, tab2, tab3, tab4 = st.tabs([
@@ -28,8 +27,10 @@ with tab1:
 
     if mode == "Single Symbol":
         symbol = st.text_input("Stock Symbol", value="NTPC.NS")
+
         if st.button("Run Signal"):
-            signal = compute_signal(symbol.strip().upper())
+            signal = compute_signal(symbol)
+
             if not signal:
                 st.warning("No usable signal found.")
             else:
@@ -41,14 +42,14 @@ with tab1:
                 if not decision["allowed"]:
                     st.error(decision["reason"])
                 else:
-                    allowed_risk = decision["allowed_risk"]
                     shares = calculate_position_size(
                         capital=metrics["current_equity"],
-                        allowed_risk=allowed_risk,
+                        allowed_risk=decision["allowed_risk"],
                         entry=signal["entry"],
                         stop=signal["stop"],
                     )
-                    st.write(f"Allowed Risk: {allowed_risk*100:.2f}%")
+
+                    st.write(f"Allowed Risk: {decision['allowed_risk']*100:.2f}%")
                     st.write(f"Position Size: {shares} shares")
 
                     if shares <= 0:
@@ -59,6 +60,7 @@ with tab1:
                                 symbol=signal["symbol"],
                                 entry=signal["entry"],
                                 stop=signal["stop"],
+                                target=signal["target"],
                                 shares=shares,
                                 confidence=signal["confidence"],
                             )
@@ -67,6 +69,7 @@ with tab1:
     else:
         if st.button("Scan Universe"):
             df_signals = scan_universe()
+
             if df_signals.empty:
                 st.warning("No signals found in the current universe.")
             else:
@@ -88,6 +91,7 @@ with tab1:
                         entry=float(top["entry"]),
                         stop=float(top["stop"]),
                     )
+
                     st.write(f"Allowed Risk: {decision['allowed_risk']*100:.2f}%")
                     st.write(f"Position Size: {shares} shares")
 
@@ -96,6 +100,7 @@ with tab1:
                             symbol=str(top["symbol"]),
                             entry=float(top["entry"]),
                             stop=float(top["stop"]),
+                            target=float(top["target"]),
                             shares=shares,
                             confidence=int(top["confidence"]),
                         )
@@ -119,6 +124,7 @@ with tab2:
     col7.metric("Freeze Flag", "ON" if metrics["freeze_flag"] else "OFF")
 
     closed = trades[trades["status"] == "CLOSED"].copy() if not trades.empty else pd.DataFrame()
+
     if not closed.empty:
         closed["entry_date"] = pd.to_datetime(closed["entry_date"])
         closed["exit_date"] = pd.to_datetime(closed["exit_date"])
@@ -179,7 +185,7 @@ with tab3:
                     st.warning("Please enter a valid exit price.")
                 else:
                     database.close_trade(int(trade_id), float(exit_price))
-                    st.success("Trade closed. Refresh tab if needed.")
+                    st.success("Trade closed.")
 
 with tab4:
     st.subheader("Risk Controls")
