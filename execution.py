@@ -1,20 +1,22 @@
-from database import engine
-from sqlalchemy import text
-from datetime import datetime
+from database import add_trade
 
-def open_trade(symbol, entry, stop, size, confidence):
-    with engine.begin() as conn:
-        conn.execute(text("""
-        INSERT INTO trades
-        (symbol, entry_price, stop_price, position_size,
-         confidence, status, entry_date)
-        VALUES
-        (:symbol, :entry, :stop, :size, :confidence, 'ACTIVE', :now)
-        """), {
-            "symbol": symbol,
-            "entry": entry,
-            "stop": stop,
-            "size": size,
-            "confidence": confidence,
-            "now": datetime.now()
-        })
+
+def calculate_position_size(capital: float, allowed_risk: float, entry: float, stop: float) -> int:
+    risk_amount = capital * allowed_risk
+    risk_per_share = entry - stop
+
+    if risk_per_share <= 0:
+        return 0
+
+    shares = int(risk_amount // risk_per_share)
+    return max(shares, 0)
+
+
+def record_paper_trade(symbol: str, entry: float, stop: float, shares: int, confidence: int) -> None:
+    add_trade(
+        symbol=symbol,
+        entry_price=entry,
+        stop_price=stop,
+        position_size=shares,
+        confidence=confidence,
+    )
